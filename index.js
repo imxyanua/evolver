@@ -766,9 +766,15 @@ async function main() {
       const data = await resp.json();
       const outFlag = args.find(a => typeof a === 'string' && a.startsWith('--out='));
       const safeId = String(data.skill_id || skillId).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-      const outDir = outFlag
+      const rawOutDir = outFlag
         ? outFlag.slice('--out='.length)
         : path.join('.', 'skills', safeId);
+      const outDir = path.resolve(rawOutDir);
+      const cwd = path.resolve('.');
+      if (!outDir.startsWith(cwd + path.sep) && outDir !== cwd) {
+        console.error('[fetch] Invalid --out path: directory must be within the current working directory.');
+        process.exit(1);
+      }
 
       if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
