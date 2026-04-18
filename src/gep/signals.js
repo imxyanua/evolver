@@ -1,5 +1,5 @@
 // Opportunity signal names (shared with mutation.js and personality.js).
-var OPPORTUNITY_SIGNALS = [
+const OPPORTUNITY_SIGNALS = [
   'user_feature_request',
   'user_improvement_suggestion',
   'perf_bottleneck',
@@ -23,9 +23,8 @@ var OPPORTUNITY_SIGNALS = [
 ];
 
 function hasOpportunitySignal(signals) {
-  var list = Array.isArray(signals) ? signals : [];
-  for (var i = 0; i < OPPORTUNITY_SIGNALS.length; i++) {
-    var name = OPPORTUNITY_SIGNALS[i];
+  const list = Array.isArray(signals) ? signals : [];
+  for (const name of OPPORTUNITY_SIGNALS) {
     if (list.includes(name)) return true;
     if (list.some(function (s) { return String(s).startsWith(name + ':'); })) return true;
   }
@@ -39,11 +38,11 @@ function analyzeRecentHistory(recentEvents) {
     return { suppressedSignals: new Set(), recentIntents: [], consecutiveRepairCount: 0 };
   }
   // Take only the last 10 events
-  var recent = recentEvents.slice(-10);
+  const recent = recentEvents.slice(-10);
 
   // Count consecutive same-intent runs at the tail
-  var consecutiveRepairCount = 0;
-  for (var i = recent.length - 1; i >= 0; i--) {
+  let consecutiveRepairCount = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
     if (recent[i].intent === 'repair') {
       consecutiveRepairCount++;
     } else {
@@ -52,45 +51,40 @@ function analyzeRecentHistory(recentEvents) {
   }
 
   // Count signal frequency in last 8 events: signal -> count
-  var signalFreq = {};
-  var geneFreq = {};
-  var tail = recent.slice(-8);
-  for (var j = 0; j < tail.length; j++) {
-    var evt = tail[j];
-    var sigs = Array.isArray(evt.signals) ? evt.signals : [];
-    for (var k = 0; k < sigs.length; k++) {
-      var s = String(sigs[k]);
+  const signalFreq = {};
+  const geneFreq = {};
+  const tail = recent.slice(-8);
+  for (const evt of tail) {
+    const sigs = Array.isArray(evt.signals) ? evt.signals : [];
+    for (const s of sigs) {
       // Normalize: strip details suffix so frequency keys match dedup filter keys
-      var key = s.startsWith('errsig:') ? 'errsig'
+      const key = s.startsWith('errsig:') ? 'errsig'
         : s.startsWith('recurring_errsig') ? 'recurring_errsig'
         : s.startsWith('user_feature_request:') ? 'user_feature_request'
         : s.startsWith('user_improvement_suggestion:') ? 'user_improvement_suggestion'
         : s;
       signalFreq[key] = (signalFreq[key] || 0) + 1;
     }
-    var genes = Array.isArray(evt.genes_used) ? evt.genes_used : [];
-    for (var g = 0; g < genes.length; g++) {
-      geneFreq[String(genes[g])] = (geneFreq[String(genes[g])] || 0) + 1;
+    const genes = Array.isArray(evt.genes_used) ? evt.genes_used : [];
+    for (const gene of genes) {
+      geneFreq[String(gene)] = (geneFreq[String(gene)] || 0) + 1;
     }
   }
 
   // Suppress signals that appeared in 3+ of the last 8 events (they are being over-processed)
-  var suppressedSignals = new Set();
-  var entries = Object.entries(signalFreq);
-  for (var ei = 0; ei < entries.length; ei++) {
-    if (entries[ei][1] >= 3) {
-      suppressedSignals.add(entries[ei][0]);
-    }
+  const suppressedSignals = new Set();
+  for (const [sig, count] of Object.entries(signalFreq)) {
+    if (count >= 3) suppressedSignals.add(sig);
   }
 
-  var recentIntents = recent.map(function(e) { return e.intent || 'unknown'; });
+  const recentIntents = recent.map(function(e) { return e.intent || 'unknown'; });
 
   // Count empty cycles (blast_radius.files === 0) in last 8 events.
   // High ratio indicates the evolver is spinning without producing real changes.
-  var emptyCycleCount = 0;
-  for (var ec = 0; ec < tail.length; ec++) {
-    var br = tail[ec].blast_radius;
-    var em = tail[ec].meta && tail[ec].meta.empty_cycle;
+  let emptyCycleCount = 0;
+  for (const evt of tail) {
+    const br = evt.blast_radius;
+    const em = evt.meta && evt.meta.empty_cycle;
     if (em || (br && br.files === 0 && br.lines === 0)) {
       emptyCycleCount++;
     }
@@ -99,11 +93,11 @@ function analyzeRecentHistory(recentEvents) {
   // Count consecutive empty cycles at the tail (not just total in last 8).
   // This detects saturation: the evolver has exhausted innovation space and keeps producing
   // zero-change cycles. Used to trigger graceful degradation to steady-state mode.
-  var consecutiveEmptyCycles = 0;
-  for (var se = recent.length - 1; se >= 0; se--) {
-    var seBr = recent[se].blast_radius;
-    var seEm = recent[se].meta && recent[se].meta.empty_cycle;
-    if (seEm || (seBr && seBr.files === 0 && seBr.lines === 0)) {
+  let consecutiveEmptyCycles = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const br = recent[i].blast_radius;
+    const em = recent[i].meta && recent[i].meta.empty_cycle;
+    if (em || (br && br.files === 0 && br.lines === 0)) {
       consecutiveEmptyCycles++;
     } else {
       break;
@@ -112,9 +106,9 @@ function analyzeRecentHistory(recentEvents) {
 
   // Count consecutive failures at the tail of recent events.
   // This tells the evolver "you have been failing N times in a row -- slow down."
-  var consecutiveFailureCount = 0;
-  for (var cf = recent.length - 1; cf >= 0; cf--) {
-    var outcome = recent[cf].outcome;
+  let consecutiveFailureCount = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const outcome = recent[i].outcome;
     if (outcome && outcome.status === 'failed') {
       consecutiveFailureCount++;
     } else {
@@ -123,10 +117,9 @@ function analyzeRecentHistory(recentEvents) {
   }
 
   // Count total failures in last 8 events (failure ratio).
-  var recentFailureCount = 0;
-  for (var rf = 0; rf < tail.length; rf++) {
-    var rfOut = tail[rf].outcome;
-    if (rfOut && rfOut.status === 'failed') recentFailureCount++;
+  let recentFailureCount = 0;
+  for (const evt of tail) {
+    if (evt.outcome && evt.outcome.status === 'failed') recentFailureCount++;
   }
 
   return {
@@ -150,7 +143,7 @@ function analyzeRecentHistory(recentEvents) {
 // a threshold. This catches fuzzy/distributed patterns that no single
 // regex can match.
 // ---------------------------------------------------------------------------
-var SIGNAL_PROFILES = {
+const SIGNAL_PROFILES = {
   perf_bottleneck: {
     keywords: { 'slow': 3, 'timeout': 4, 'timed out': 4, 'latency': 3, 'bottleneck': 5,
                 'lag': 2, 'delay': 2, 'hung': 3, 'freeze': 3, 'unresponsive': 4,
@@ -198,20 +191,14 @@ var SIGNAL_PROFILES = {
 };
 
 function _extractKeywordScore(lower) {
-  var scored = [];
-  var profileKeys = Object.keys(SIGNAL_PROFILES);
-  for (var pi = 0; pi < profileKeys.length; pi++) {
-    var signalName = profileKeys[pi];
-    var profile = SIGNAL_PROFILES[signalName];
-    var totalScore = 0;
-    var kwKeys = Object.keys(profile.keywords);
-    for (var ki = 0; ki < kwKeys.length; ki++) {
-      var kw = kwKeys[ki];
-      var weight = profile.keywords[kw];
-      var idx = 0;
-      var count = 0;
+  const scored = [];
+  for (const [signalName, profile] of Object.entries(SIGNAL_PROFILES)) {
+    let totalScore = 0;
+    for (const [kw, weight] of Object.entries(profile.keywords)) {
+      let idx = 0;
+      let count = 0;
       while (idx < lower.length && count < 20) {
-        var pos = lower.indexOf(kw, idx);
+        const pos = lower.indexOf(kw, idx);
         if (pos === -1) break;
         count++;
         idx = pos + kw.length;
@@ -230,41 +217,41 @@ function _extractKeywordScore(lower) {
 // Sends a corpus summary to the Hub for LLM-based signal extraction.
 // Rate-limited to every N evolution cycles. Falls back silently on failure.
 // ---------------------------------------------------------------------------
-var _llmSignalCycleCount = 0;
-var LLM_SIGNAL_INTERVAL = 5;
+let _llmSignalCycleCount = 0;
+const LLM_SIGNAL_INTERVAL = 5;
 
 function _extractLLM(corpus) {
   _llmSignalCycleCount++;
   if (_llmSignalCycleCount % LLM_SIGNAL_INTERVAL !== 1) return [];
 
   try {
-    var getHubUrl = require('./a2aProtocol').getHubUrl;
-    var getHubNodeSecret = require('./a2aProtocol').getHubNodeSecret;
-    var getNodeId = require('./a2aProtocol').getNodeId;
-    var hubUrl = getHubUrl();
-    var nodeSecret = getHubNodeSecret();
+    const getHubUrl = require('./a2aProtocol').getHubUrl;
+    const getHubNodeSecret = require('./a2aProtocol').getHubNodeSecret;
+    const getNodeId = require('./a2aProtocol').getNodeId;
+    const hubUrl = getHubUrl();
+    const nodeSecret = getHubNodeSecret();
     if (!hubUrl || !nodeSecret) return [];
 
-    var summary = corpus.slice(0, 2000);
-    var postData = JSON.stringify({
+    const summary = corpus.slice(0, 2000);
+    const postData = JSON.stringify({
       corpus_summary: summary,
       signal_types: OPPORTUNITY_SIGNALS,
       sender_id: getNodeId() || undefined,
     });
 
-    var url = hubUrl + '/a2a/signal/analyze';
+    const url = hubUrl + '/a2a/signal/analyze';
 
     // Use execSync + curl for truly synchronous HTTP. Node's http.request() is
     // async and its callbacks cannot fire inside a synchronous spin-wait loop
     // because execSync blocks the event loop.
-    var curlCmd = 'curl -s -m 10 -X POST'
+    const curlCmd = 'curl -s -m 10 -X POST'
       + ' -H "Content-Type: application/json"'
       + ' -H "Authorization: Bearer ' + nodeSecret + '"'
       + ' -d ' + JSON.stringify(postData).replace(/'/g, "'\\''")
       + ' ' + JSON.stringify(url);
 
-    var execSync = require('child_process').execSync;
-    var stdout = '';
+    const execSync = require('child_process').execSync;
+    let stdout = '';
     try {
       stdout = execSync(curlCmd, {
         timeout: 12000,
@@ -278,7 +265,7 @@ function _extractLLM(corpus) {
 
     if (!stdout || typeof stdout !== 'string') return [];
 
-    var parsed = JSON.parse(stdout);
+    const parsed = JSON.parse(stdout);
     if (Array.isArray(parsed.signals)) {
       return parsed.signals.filter(function (s) {
         return typeof s === 'string' && s.length > 0 && s.length < 200;
@@ -295,15 +282,14 @@ function _extractLLM(corpus) {
 // Deduplicates and logs per-layer contribution for observability.
 // ---------------------------------------------------------------------------
 function _mergeSignals(regexSignals, scoreSignals, llmSignals) {
-  var merged = new Set();
-  var ri, si, li;
-  for (ri = 0; ri < regexSignals.length; ri++) merged.add(regexSignals[ri]);
-  for (si = 0; si < scoreSignals.length; si++) merged.add(scoreSignals[si]);
-  for (li = 0; li < llmSignals.length; li++) merged.add(llmSignals[li]);
+  const merged = new Set();
+  for (const s of regexSignals) merged.add(s);
+  for (const s of scoreSignals) merged.add(s);
+  for (const s of llmSignals) merged.add(s);
 
-  var scoreOnly = scoreSignals.filter(function (s) { return !regexSignals.includes(s); });
-  var llmOnly = llmSignals.filter(function (s) { return !regexSignals.includes(s) && !scoreSignals.includes(s); });
-  var overlap = regexSignals.filter(function (s) { return scoreSignals.includes(s) || llmSignals.includes(s); });
+  const scoreOnly = scoreSignals.filter(function (s) { return !regexSignals.includes(s); });
+  const llmOnly = llmSignals.filter(function (s) { return !regexSignals.includes(s) && !scoreSignals.includes(s); });
+  const overlap = regexSignals.filter(function (s) { return scoreSignals.includes(s) || llmSignals.includes(s); });
 
   if (scoreOnly.length > 0 || llmOnly.length > 0 || overlap.length > 0) {
     console.log('[Signals] Multi-strategy: regex=' + regexSignals.length +
@@ -323,22 +309,22 @@ function _mergeSignals(regexSignals, scoreSignals, llmSignals) {
 // Deterministic, zero-latency, hand-crafted rules for known signal patterns.
 // ---------------------------------------------------------------------------
 function _extractRegex(corpus, lower, errorHit) {
-  var signals = [];
+  const signals = [];
 
   if (errorHit) signals.push('log_error');
 
   try {
-    var lines = corpus
+    const lines = corpus
       .split('\n')
       .map(function (l) { return String(l || '').trim(); })
       .filter(Boolean);
 
-    var errLine =
+    const errLine =
       lines.find(function (l) { return /\b(typeerror|referenceerror|syntaxerror)\b\s*:|error\s*:|exception\s*:|\[error|错误\s*[：:]|异常\s*[：:]|报错\s*[：:]|失败\s*[：:]/i.test(l); }) ||
       null;
 
     if (errLine) {
-      var clipped = errLine.replace(/\s+/g, ' ').slice(0, 260);
+      const clipped = errLine.replace(/\s+/g, ' ').slice(0, 260);
       signals.push('errsig:' + clipped);
     }
   } catch (e) { /* error-line extraction non-critical */ }
@@ -358,18 +344,18 @@ function _extractRegex(corpus, lower, errorHit) {
   // --- Recurring error detection (robustness signals) ---
   // Count repeated identical errors -- these indicate systemic issues that need automated fixes
   try {
-    var errorCounts = {};
-    var errPatterns = corpus.match(/(?:LLM error|"error"|"status":\s*"error")[^}]{0,200}/gi) || [];
-    for (var ep = 0; ep < errPatterns.length; ep++) {
+    const errorCounts = {};
+    const errPatterns = corpus.match(/(?:LLM error|"error"|"status":\s*"error")[^}]{0,200}/gi) || [];
+    for (const ep of errPatterns) {
       // Normalize to a short key
-      var key = errPatterns[ep].replace(/\s+/g, ' ').slice(0, 100);
+      const key = ep.replace(/\s+/g, ' ').slice(0, 100);
       errorCounts[key] = (errorCounts[key] || 0) + 1;
     }
-    var recurringErrors = Object.entries(errorCounts).filter(function (e) { return e[1] >= 3; });
+    const recurringErrors = Object.entries(errorCounts).filter(function (e) { return e[1] >= 3; });
     if (recurringErrors.length > 0) {
       signals.push('recurring_error');
       // Include the top recurring error signature for the agent to diagnose
-      var topErr = recurringErrors.sort(function (a, b) { return b[1] - a[1]; })[0];
+      const topErr = recurringErrors.sort(function (a, b) { return b[1] - a[1]; })[0];
       signals.push('recurring_errsig(' + topErr[1] + 'x):' + topErr[0].slice(0, 150));
     }
   } catch (e) { /* recurring error detection non-critical */ }
@@ -382,28 +368,28 @@ function _extractRegex(corpus, lower, errorHit) {
   // --- Opportunity signals (innovation / feature requests) ---
   // Support 4 languages: EN, ZH-CN, ZH-TW, JA. Attach snippet for selector/prompt use.
 
-  var featureRequestSnippet = '';
-  var featEn = corpus.match(/\b(add|implement|create|build|make|develop|write|design)\b[^.?!\n]{3,120}\b(feature|function|module|capability|tool|support|endpoint|command|option|mode)\b/i);
+  let featureRequestSnippet = '';
+  const featEn = corpus.match(/\b(add|implement|create|build|make|develop|write|design)\b[^.?!\n]{3,120}\b(feature|function|module|capability|tool|support|endpoint|command|option|mode)\b/i);
   if (featEn) featureRequestSnippet = featEn[0].replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!featureRequestSnippet && /\b(i want|i need|we need|please add|can you add|could you add|let'?s add)\b/i.test(lower)) {
-    var featWant = corpus.match(/.{0,80}\b(i want|i need|we need|please add|can you add|could you add|let'?s add)\b.{0,80}/i);
+    const featWant = corpus.match(/.{0,80}\b(i want|i need|we need|please add|can you add|could you add|let'?s add)\b.{0,80}/i);
     featureRequestSnippet = featWant ? featWant[0].replace(/\s+/g, ' ').trim().slice(0, 200) : 'feature request';
   }
   if (!featureRequestSnippet && /加个|实现一下|做个|想要\s*一个|需要\s*一个|帮我加|帮我开发|加一下|新增一个|加个功能|做个功能|我想/.test(corpus)) {
-    var featZh = corpus.match(/.{0,100}(加个|实现一下|做个|想要\s*一个|需要\s*一个|帮我加|帮我开发|加一下|新增一个|加个功能|做个功能).{0,100}/);
+    const featZh = corpus.match(/.{0,100}(加个|实现一下|做个|想要\s*一个|需要\s*一个|帮我加|帮我开发|加一下|新增一个|加个功能|做个功能).{0,100}/);
     if (featZh) featureRequestSnippet = featZh[0].replace(/\s+/g, ' ').trim().slice(0, 200);
     if (!featureRequestSnippet && /我想/.test(corpus)) {
-      var featWantZh = corpus.match(/我想\s*[，,\.。、\s]*([\s\S]{0,400})/);
+      const featWantZh = corpus.match(/我想\s*[，,\.。、\s]*([\s\S]{0,400})/);
       featureRequestSnippet = featWantZh ? (featWantZh[1].replace(/\s+/g, ' ').trim().slice(0, 200) || '功能需求') : '功能需求';
     }
     if (!featureRequestSnippet) featureRequestSnippet = '功能需求';
   }
   if (!featureRequestSnippet && /加個|實現一下|做個|想要一個|請加|新增一個|加個功能|做個功能|幫我加/.test(corpus)) {
-    var featTw = corpus.match(/.{0,100}(加個|實現一下|做個|想要一個|請加|新增一個|加個功能|做個功能|幫我加).{0,100}/);
+    const featTw = corpus.match(/.{0,100}(加個|實現一下|做個|想要一個|請加|新增一個|加個功能|做個功能|幫我加).{0,100}/);
     featureRequestSnippet = featTw ? featTw[0].replace(/\s+/g, ' ').trim().slice(0, 200) : '功能需求';
   }
   if (!featureRequestSnippet && /追加|実装|作って|機能を|追加して|が欲しい|を追加|してほしい/.test(corpus)) {
-    var featJa = corpus.match(/.{0,100}(追加|実装|作って|機能を|追加して|が欲しい|を追加|してほしい).{0,100}/);
+    const featJa = corpus.match(/.{0,100}(追加|実装|作って|機能を|追加して|が欲しい|を追加|してほしい).{0,100}/);
     featureRequestSnippet = featJa ? featJa[0].replace(/\s+/g, ' ').trim().slice(0, 200) : '機能要望';
   }
   if (featureRequestSnippet || /\b(add|implement|create|build|make|develop|write|design)\b[^.?!\n]{3,60}\b(feature|function|module|capability|tool|support|endpoint|command|option|mode)\b/i.test(corpus) ||
@@ -416,23 +402,23 @@ function _extractRegex(corpus, lower, errorHit) {
   }
 
   // user_improvement_suggestion: 4 languages + snippet
-  var improvementSnippet = '';
+  let improvementSnippet = '';
   if (!errorHit) {
-    var impEn = corpus.match(/.{0,80}\b(should be|could be better|improve|enhance|upgrade|refactor|clean up|simplify|streamline)\b.{0,80}/i);
+    const impEn = corpus.match(/.{0,80}\b(should be|could be better|improve|enhance|upgrade|refactor|clean up|simplify|streamline)\b.{0,80}/i);
     if (impEn) improvementSnippet = impEn[0].replace(/\s+/g, ' ').trim().slice(0, 200);
     if (!improvementSnippet && /改进一下|优化一下|简化|重构|整理一下|弄得更好/.test(corpus)) {
-      var impZh = corpus.match(/.{0,100}(改进一下|优化一下|简化|重构|整理一下|弄得更好).{0,100}/);
+      const impZh = corpus.match(/.{0,100}(改进一下|优化一下|简化|重构|整理一下|弄得更好).{0,100}/);
       improvementSnippet = impZh ? impZh[0].replace(/\s+/g, ' ').trim().slice(0, 200) : '改进建议';
     }
     if (!improvementSnippet && /改進一下|優化一下|簡化|重構|整理一下|弄得更好/.test(corpus)) {
-      var impTw = corpus.match(/.{0,100}(改進一下|優化一下|簡化|重構|整理一下|弄得更好).{0,100}/);
+      const impTw = corpus.match(/.{0,100}(改進一下|優化一下|簡化|重構|整理一下|弄得更好).{0,100}/);
       improvementSnippet = impTw ? impTw[0].replace(/\s+/g, ' ').trim().slice(0, 200) : '改進建議';
     }
     if (!improvementSnippet && /改善|最適化|簡素化|リファクタ|良くして|改良/.test(corpus)) {
-      var impJa = corpus.match(/.{0,100}(改善|最適化|簡素化|リファクタ|良くして|改良).{0,100}/);
+      const impJa = corpus.match(/.{0,100}(改善|最適化|簡素化|リファクタ|良くして|改良).{0,100}/);
       improvementSnippet = impJa ? impJa[0].replace(/\s+/g, ' ').trim().slice(0, 200) : '改善要望';
     }
-    var hasImprovement = improvementSnippet ||
+    const hasImprovement = improvementSnippet ||
       /\b(should be|could be better|improve|enhance|upgrade|refactor|clean up|simplify|streamline)\b/i.test(lower) ||
       /改进一下|优化一下|简化|重构|整理一下|弄得更好/.test(corpus) ||
       /改進一下|優化一下|簡化|重構|整理一下|弄得更好/.test(corpus) ||
@@ -457,23 +443,23 @@ function _extractRegex(corpus, lower, errorHit) {
   }
 
   // --- Tool Usage Analytics ---
-  var toolUsage = {};
-  var toolMatches = corpus.match(/\[TOOL:\s*([\w-]+)\]/g) || [];
-  
-  // Extract exec commands to identify benign loops (like watchdog checks)
-  var execCommands = corpus.match(/exec: (node\s+[\w\/\.-]+\.js\s+ensure)/g) || [];
-  var benignExecCount = execCommands.length;
+  const toolUsage = {};
+  const toolMatches = corpus.match(/\[TOOL:\s*([\w-]+)\]/g) || [];
 
-  for (var i = 0; i < toolMatches.length; i++) {
-    var toolName = toolMatches[i].match(/\[TOOL:\s*([\w-]+)\]/)[1];
+  // Extract exec commands to identify benign loops (like watchdog checks)
+  const execCommands = corpus.match(/exec: (node\s+[\w\/\.-]+\.js\s+ensure)/g) || [];
+  const benignExecCount = execCommands.length;
+
+  for (const match of toolMatches) {
+    const toolName = match.match(/\[TOOL:\s*([\w-]+)\]/)[1];
     toolUsage[toolName] = (toolUsage[toolName] || 0) + 1;
   }
-  
+
   // Adjust exec count by subtracting benign commands
   if (toolUsage['exec']) {
     toolUsage['exec'] = Math.max(0, toolUsage['exec'] - benignExecCount);
   }
-  
+
   Object.keys(toolUsage).forEach(function(tool) {
     if (toolUsage[tool] >= 10) { // Bumped threshold from 5 to 10
       signals.push('high_tool_usage:' + tool);
@@ -487,22 +473,23 @@ function _extractRegex(corpus, lower, errorHit) {
   // --- Tool bypass detection ---
   // When the agent uses shell/exec to run ad-hoc scripts instead of registered tools,
   // it indicates a tool integrity issue (bypassing the tool layer).
-  var bypassPatterns = [
+  const bypassPatterns = [
     /node\s+\S+\.m?js/,
     /npx\s+/,
     /curl\s+.*api/i,
     /python\s+\S+\.py/,
   ];
-  var execContent = corpus.match(/exec:.*$/gm) || [];
-  for (var bpi = 0; bpi < execContent.length; bpi++) {
-    var line = execContent[bpi];
-    for (var bpj = 0; bpj < bypassPatterns.length; bpj++) {
-      if (bypassPatterns[bpj].test(line)) {
+  const execContent = corpus.match(/exec:.*$/gm) || [];
+  let toolBypassFound = false;
+  for (const line of execContent) {
+    for (const pattern of bypassPatterns) {
+      if (pattern.test(line)) {
         signals.push('tool_bypass');
-        bpi = execContent.length;
+        toolBypassFound = true;
         break;
       }
     }
+    if (toolBypassFound) break;
   }
 
   return signals;
@@ -516,34 +503,34 @@ function _extractRegex(corpus, lower, errorHit) {
 // Signature and return type are unchanged -- callers are not affected.
 // ---------------------------------------------------------------------------
 function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, userSnippet, recentEvents }) {
-  var corpus = [
+  const corpus = [
     String(recentSessionTranscript || ''),
     String(todayLog || ''),
     String(memorySnippet || ''),
     String(userSnippet || ''),
   ].join('\n');
-  var lower = corpus.toLowerCase();
+  const lower = corpus.toLowerCase();
 
-  var history = analyzeRecentHistory(recentEvents || []);
+  const history = analyzeRecentHistory(recentEvents || []);
 
-  var errorHit = /\[error\]|error:|exception:|iserror":true|"status":\s*"error"|"status":\s*"failed"|错误\s*[：:]|异常\s*[：:]|报错\s*[：:]|失败\s*[：:]/.test(lower);
+  const errorHit = /\[error\]|error:|exception:|iserror":true|"status":\s*"error"|"status":\s*"failed"|错误\s*[：:]|异常\s*[：:]|报错\s*[：:]|失败\s*[：:]/.test(lower);
 
   // Layer 1: Regex (deterministic, 0ms)
-  var regexSignals = _extractRegex(corpus, lower, errorHit);
+  const regexSignals = _extractRegex(corpus, lower, errorHit);
 
   // Layer 2: Weighted keyword scoring (statistical, 0ms)
-  var scoreSignals = _extractKeywordScore(lower);
+  const scoreSignals = _extractKeywordScore(lower);
 
   // Layer 3: LLM semantic analysis (rate-limited, async, optional)
-  var llmSignals = _extractLLM(corpus);
+  const llmSignals = _extractLLM(corpus);
 
   // Merge all layers
-  var signals = _mergeSignals(regexSignals, scoreSignals, llmSignals);
+  let signals = _mergeSignals(regexSignals, scoreSignals, llmSignals);
 
   // --- Post-processing (applies to merged signal set) ---
 
   // Signal prioritization: remove cosmetic signals when actionable ones exist
-  var actionable = signals.filter(function (s) {
+  const actionable = signals.filter(function (s) {
     return s !== 'user_missing' && s !== 'memory_missing' && s !== 'session_logs_missing' && s !== 'windows_shell_incompatible';
   });
   if (actionable.length > 0) {
@@ -552,9 +539,9 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
 
   // De-duplication: suppress signals that have been over-processed in recent history
   if (history.suppressedSignals.size > 0) {
-    var beforeDedup = signals.length;
+    const beforeDedup = signals.length;
     signals = signals.filter(function (s) {
-      var key = s.startsWith('errsig:') ? 'errsig'
+      const key = s.startsWith('errsig:') ? 'errsig'
         : s.startsWith('recurring_errsig') ? 'recurring_errsig'
         : s.startsWith('user_feature_request:') ? 'user_feature_request'
         : s.startsWith('user_improvement_suggestion:') ? 'user_improvement_suggestion'
@@ -607,13 +594,12 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
     signals.push('consecutive_failure_streak_' + history.consecutiveFailureCount);
     if (history.consecutiveFailureCount >= 5) {
       signals.push('failure_loop_detected');
-      var topGene = null;
-      var topGeneCount = 0;
-      var gfEntries = Object.entries(history.geneFreq);
-      for (var gfi = 0; gfi < gfEntries.length; gfi++) {
-        if (gfEntries[gfi][1] > topGeneCount) {
-          topGeneCount = gfEntries[gfi][1];
-          topGene = gfEntries[gfi][0];
+      let topGene = null;
+      let topGeneCount = 0;
+      for (const [gene, count] of Object.entries(history.geneFreq)) {
+        if (count > topGeneCount) {
+          topGeneCount = count;
+          topGene = gene;
         }
       }
       if (topGene) {
@@ -631,12 +617,12 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
   // Plateau detection: recent scores trending down or stagnant.
   // Uses score data from recentEvents to detect diminishing returns.
   if (Array.isArray(recentEvents) && recentEvents.length >= 4) {
-    var recentScores = recentEvents.slice(-6).map(function (e) {
+    const recentScores = recentEvents.slice(-6).map(function (e) {
       return e.outcome && typeof e.outcome.score === 'number' ? e.outcome.score : -1;
     }).filter(function (s) { return s >= 0; });
     if (recentScores.length >= 3) {
-      var avgScore = recentScores.reduce(function (a, b) { return a + b; }, 0) / recentScores.length;
-      var improving = recentScores.length >= 2 && recentScores[recentScores.length - 1] > recentScores[recentScores.length - 2] + 0.05;
+      const avgScore = recentScores.reduce(function (a, b) { return a + b; }, 0) / recentScores.length;
+      const improving = recentScores.length >= 2 && recentScores[recentScores.length - 1] > recentScores[recentScores.length - 2] + 0.05;
       if (avgScore < 0.35 && !improving) {
         signals.push('plateau_pivot_required');
       } else if (avgScore < 0.55 && !improving && history.consecutiveRepairCount >= 2) {
